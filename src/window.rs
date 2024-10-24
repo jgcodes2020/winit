@@ -1308,6 +1308,11 @@ pub trait Window: Surface {
     ///
     /// [window menu]: https://en.wikipedia.org/wiki/Common_menus_in_Microsoft_Windows#System_menu
     fn show_window_menu(&self, position: Position);
+
+    /// Upcasts this `Window` to a [`Surface`]. 
+    fn as_surface(&self) -> &dyn Surface where Self: Sized {
+        self
+    }
 }
 
 impl dyn Window {
