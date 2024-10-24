@@ -24,7 +24,7 @@ use crate::error::{EventLoopError, RequestError};
 use crate::monitor::MonitorHandle;
 use crate::platform_impl;
 use crate::utils::AsAny;
-use crate::window::{CustomCursor, CustomCursorSource, Theme, Window, WindowAttributes};
+use crate::window::{CustomCursor, CustomCursorSource, Subsurface, SubsurfaceAttributes, Surface, Theme, Window, WindowAttributes};
 
 /// Provides a way to retrieve events from the system and from the windows that were registered to
 /// the events loop.
@@ -325,6 +325,12 @@ pub trait ActiveEventLoop: AsAny {
         &self,
         window_attributes: WindowAttributes,
     ) -> Result<Box<dyn Window>, RequestError>;
+
+    fn create_subsurface(
+        &self,
+        parent: &dyn Surface,
+        subsurface_attributes: SubsurfaceAttributes,
+    ) -> Result<Box<dyn Subsurface>, RequestError>;
 
     /// Create custom cursor.
     ///

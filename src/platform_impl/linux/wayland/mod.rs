@@ -1,10 +1,12 @@
 //! Winit's Wayland backend.
 
+use dpi::{LogicalPosition, PhysicalPosition};
 pub use event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 pub use output::{MonitorHandle, VideoModeHandle};
 use sctk::reexports::client::protocol::wl_surface::WlSurface;
 use sctk::reexports::client::Proxy;
 pub use window::Window;
+pub use window::subsurface::Subsurface;
 
 pub(super) use crate::cursor::OnlyCursorImage as CustomCursor;
 use crate::dpi::{LogicalSize, PhysicalSize};
@@ -38,4 +40,10 @@ fn logical_to_physical_rounded(size: LogicalSize<u32>, scale_factor: f64) -> Phy
     let width = size.width as f64 * scale_factor;
     let height = size.height as f64 * scale_factor;
     (width.round(), height.round()).into()
+}
+
+fn logical_to_physical_rounded_pos(position: LogicalPosition<i32>, scale_factor: f64) -> PhysicalPosition<i32> {
+    let x = position.x as f64 * scale_factor;
+    let y = position.y as f64 * scale_factor;
+    (x.round(), y.round()).into()
 }

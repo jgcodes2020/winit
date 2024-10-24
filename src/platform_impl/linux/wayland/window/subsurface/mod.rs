@@ -2,29 +2,21 @@ use std::any::Any;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use dpi::LogicalPosition;
 use sctk::compositor::{CompositorState, Region, SurfaceData};
 use sctk::reexports::client::protocol::wl_display::WlDisplay;
 use sctk::reexports::client::protocol::wl_surface::WlSurface;
 use sctk::reexports::client::{Proxy, QueueHandle};
-use sctk::reexports::protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
-use sctk::shell::xdg::window::{self, Window as SctkWindow, WindowDecorations};
-use sctk::shell::WaylandSurface;
-use tracing::warn;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
 
-use crate::platform_impl::wayland::{self as winit_wayland, Window};
+use crate::platform_impl::wayland::{self as winit_wayland, logical_to_physical_rounded_pos, Window};
 
 use super::{ActiveEventLoop, WindowRequests};
-use crate::dpi::{LogicalSize, PhysicalPosition, PhysicalSize, Position, Size};
-use crate::error::{NotSupportedError, OsError, RequestError};
-use crate::event::{Ime, SurfaceEvent};
-use crate::event_loop::AsyncRequestSerial;
+use crate::dpi::{LogicalSize, PhysicalSize, Position, Size};
+use crate::error::RequestError;
 use crate::monitor::MonitorHandle as CoreMonitorHandle;
-use crate::platform_impl::{Fullscreen, MonitorHandle as PlatformMonitorHandle};
 use crate::window::{
-    Cursor, CursorGrabMode, Fullscreen as CoreFullscreen, ImePurpose, ResizeDirection,
-    SubsurfaceAttributes, Surface as CoreSurface, SurfaceId, Theme, UserAttentionType,
-    Window as CoreWindow, WindowAttributes, WindowButtons, WindowLevel,
+    Cursor, CursorGrabMode, SubsurfaceAttributes, Surface as CoreSurface, SurfaceId, Subsurface as CoreSubsurface,
 };
 use winit_wayland::event_loop::sink::EventSink;
 use winit_wayland::output::MonitorHandle;
@@ -32,12 +24,12 @@ use winit_wayland::state::WinitState;
 
 pub(crate) mod state;
 
-pub use state::SubsurfaceState;
+pub(crate) use state::SubsurfaceState;
 
 /// A subsurface.
 pub struct Subsurface {
     /// Reference to the underlying subsurface.
-    subsurface: WlSubsurface,
+    _subsurface: WlSubsurface,
     surface: WlSurface,
 
     /// Window id.
@@ -89,6 +81,7 @@ impl Subsurface {
         let display = event_loop.connection.display();
 
         let size: Size = attributes.surface_size.unwrap_or(LogicalSize::new(200., 200.).into());
+        let position: Position = attributes.position.unwrap_or(LogicalPosition::new(0, 0).into());
 
         let parent_surface: WlSurface = {
             let any: &dyn Any = parent.as_any();
@@ -104,10 +97,13 @@ impl Subsurface {
 
         let (subsurface, surface) = subcompositor.create_subsurface(parent_surface, &queue_handle);
 
+        surface.set_input_region(None);
+
         let mut subsurface_state = SubsurfaceState::new(
             event_loop.connection.clone(),
             &event_loop.queue_handle,
             &state,
+            position,
             size,
             surface.clone(),
             subsurface.clone(),
@@ -144,7 +140,7 @@ impl Subsurface {
         event_loop_awakener.ping();
 
         Ok(Self {
-            subsurface,
+            _subsurface: subsurface,
             surface,
             surface_id,
             subsurface_state,
@@ -296,6 +292,17 @@ impl CoreSurface for Subsurface {
     }
 }
 
+impl CoreSubsurface for Subsurface {
+    fn position(&self) -> dpi::PhysicalPosition<i32> {
+        let subsurface_state = self.subsurface_state.lock().unwrap();
+        let position = subsurface_state.position();
+        logical_to_physical_rounded_pos(position, subsurface_state.scale_factor())
+    }
+
+    fn set_position(&self, position: dpi::Position) {
+        self.subsurface_state.lock().unwrap().set_position(position);
+    }
+}
 
 #[cfg(feature = "rwh_06")]
 impl rwh_06::HasWindowHandle for Subsurface {

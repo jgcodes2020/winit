@@ -614,6 +614,15 @@ impl RootActiveEventLoop for ActiveEventLoop {
         Ok(Box::new(window))
     }
 
+    fn create_subsurface(
+            &self,
+            parent: &dyn crate::window::Surface,
+            subsurface_attributes: crate::window::SubsurfaceAttributes,
+        ) -> Result<Box<dyn crate::window::Subsurface>, RequestError> {
+        let subsurface = crate::platform_impl::wayland::Subsurface::new(self, parent, subsurface_attributes)?;
+        Ok(Box::new(subsurface))
+    }
+
     fn available_monitors(&self) -> Box<dyn Iterator<Item = crate::monitor::MonitorHandle>> {
         Box::new(
             self.state

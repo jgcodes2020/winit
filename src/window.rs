@@ -1387,6 +1387,11 @@ impl rwh_06::HasWindowHandle for dyn Window + '_ {
     }
 }
 
+pub trait Subsurface: Surface {
+    fn position(&self) -> dpi::PhysicalPosition<i32>;
+    fn set_position(&self, position: dpi::Position);
+}
+
 /// The behavior of cursor grabbing.
 ///
 /// Use this enum with [`Surface::set_cursor_grab`] to grab the cursor.

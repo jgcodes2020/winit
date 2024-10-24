@@ -23,7 +23,7 @@ use x11rb::x11_utils::X11Error as LogicalError;
 use x11rb::xcb_ffi::ReplyOrIdError;
 
 use crate::application::ApplicationHandler;
-use crate::error::{EventLoopError, RequestError};
+use crate::error::{EventLoopError, NotSupportedError, RequestError};
 use crate::event::{DeviceId, Event, StartCause, SurfaceEvent};
 use crate::event_loop::{
     ActiveEventLoop as RootActiveEventLoop, ControlFlow, DeviceEvents,
@@ -690,6 +690,14 @@ impl RootActiveEventLoop for ActiveEventLoop {
         window_attributes: WindowAttributes,
     ) -> Result<Box<dyn CoreWindow>, RequestError> {
         Ok(Box::new(Window::new(self, window_attributes)?))
+    }
+
+    fn create_subsurface(
+            &self,
+            parent: &dyn crate::window::Surface,
+            subsurface_attributes: crate::window::SubsurfaceAttributes,
+        ) -> Result<Box<dyn crate::window::Subsurface>, RequestError> {
+        Err(RequestError::NotSupported(NotSupportedError::new("not ready yet")))
     }
 
     fn create_custom_cursor(

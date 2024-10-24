@@ -1,13 +1,9 @@
 //! The state of the window, which is shared with the event-loop.
 
-use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
 
-use ahash::HashSet;
+use dpi::Position;
 use sctk::compositor::{CompositorState, Region, SurfaceData, SurfaceDataExt};
-use sctk::reexports::client::backend::ObjectId;
-use sctk::reexports::client::protocol::wl_seat::WlSeat;
 use sctk::reexports::client::protocol::wl_shm::WlShm;
 use sctk::reexports::client::protocol::wl_surface::WlSurface;
 use sctk::reexports::client::{Connection, Proxy, QueueHandle};
@@ -15,38 +11,25 @@ use sctk::reexports::csd_frame::{
     DecorationsFrame, FrameAction, FrameClick, ResizeEdge, WindowState as XdgWindowState,
 };
 use sctk::reexports::protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
-use sctk::reexports::protocols::wp::text_input::zv3::client::zwp_text_input_v3::ZwpTextInputV3;
 use sctk::reexports::protocols::wp::viewporter::client::wp_viewport::WpViewport;
-use sctk::reexports::protocols::xdg::shell::client::xdg_toplevel::ResizeEdge as XdgResizeEdge;
 use sctk::seat::pointer::{PointerDataExt, ThemedPointer};
-use sctk::shell::xdg::window::{DecorationMode, Window, WindowConfigure};
-use sctk::shell::xdg::XdgSurface;
-use sctk::shell::WaylandSurface;
+use sctk::shell::xdg::window::WindowConfigure;
 use sctk::shm::slot::SlotPool;
-use sctk::shm::Shm;
-use sctk::subcompositor::SubcompositorState;
-use tracing::{info, warn};
+use tracing::warn;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
-use wayland_protocols_plasma::blur::client::org_kde_kwin_blur::OrgKdeKwinBlur;
 
 use crate::cursor::CustomCursor as RootCustomCursor;
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalSize, Size};
 use crate::error::{NotSupportedError, RequestError};
 use crate::platform_impl::wayland::logical_to_physical_rounded;
 use crate::platform_impl::wayland::seat::{
-    PointerConstraintsState, WinitPointerData, WinitPointerDataExt, ZwpTextInputV3Ext,
+    PointerConstraintsState, WinitPointerData, WinitPointerDataExt,
 };
-use crate::platform_impl::wayland::state::{WindowCompositorUpdate, WinitState};
+use crate::platform_impl::wayland::state::WinitState;
 use crate::platform_impl::wayland::types::cursor::{CustomCursor, SelectedCursor};
-use crate::platform_impl::wayland::types::kwin_blur::KWinBlurManager;
 use crate::platform_impl::wayland::window::state::{FrameCallbackState, GrabState};
 use crate::platform_impl::PlatformCustomCursor;
-use crate::window::{CursorGrabMode, CursorIcon, ImePurpose, ResizeDirection, SurfaceId, Theme};
-
-#[cfg(feature = "sctk-adwaita")]
-pub type WinitFrame = sctk_adwaita::AdwaitaFrame<WinitState>;
-#[cfg(not(feature = "sctk-adwaita"))]
-pub type WinitFrame = sctk::shell::xdg::fallback_frame::FallbackFrame<WinitState>;
+use crate::window::{CursorGrabMode, CursorIcon};
 
 // Minimum window surface size.
 const MIN_WINDOW_SIZE: LogicalSize<u32> = LogicalSize::new(2, 1);
@@ -88,17 +71,11 @@ pub struct SubsurfaceState {
     /// The current cursor grabbing mode.
     cursor_grab_mode: GrabState,
 
-    /// The surface size of the window, as in without client side decorations.
+    /// The position of the window.
+    position: LogicalPosition<i32>,
+
+    /// The surface size of the window.
     size: LogicalSize<u32>,
-
-    /// The size of the window when no states were applied to it. The primary use for it
-    /// is to fallback to original window size, before it was maximized, if the compositor
-    /// sends `None` for the new size in the configure.
-    stateless_size: LogicalSize<u32>,
-
-    /// Initial window size provided by the user. Removed on the first
-    /// configure.
-    initial_size: Option<Size>,
 
     /// The scale factor of the window.
     scale_factor: f64,
@@ -108,11 +85,6 @@ pub struct SubsurfaceState {
 
     viewport: Option<WpViewport>,
     fractional_scale: Option<WpFractionalScaleV1>,
-
-    /// Whether the client side decorations have pending move operations.
-    ///
-    /// The value is the serial of the event triggered moved.
-    has_pending_move: Option<u32>,
 
     /// The underlying SCTK window.
     pub surface: WlSurface,
@@ -124,6 +96,7 @@ impl SubsurfaceState {
         connection: Connection,
         queue_handle: &QueueHandle<WinitState>,
         winit_state: &WinitState,
+        initial_position: Position,
         initial_size: Size,
         surface: WlSurface,
         subsurface: WlSubsurface
@@ -147,7 +120,6 @@ impl SubsurfaceState {
                 cursor_visible: true,
                 fractional_scale,
                 frame_callback_state: FrameCallbackState::None,
-                has_pending_move: None,
                 last_configure: None,
                 pointer_constraints,
                 pointers: Default::default(),
@@ -155,9 +127,8 @@ impl SubsurfaceState {
                 scale_factor: 1.,
                 shm: winit_state.shm.wl_shm().clone(),
                 custom_cursor_pool: winit_state.custom_cursor_pool.clone(),
+                position: initial_position.to_logical(1.),
                 size: initial_size.to_logical(1.),
-                stateless_size: initial_size.to_logical(1.),
-                initial_size: Some(initial_size),
                 transparent: false,
                 surface,
                 subsurface,
@@ -177,22 +148,22 @@ impl SubsurfaceState {
     }
 
     /// Get the current state of the frame callback.
-    pub fn frame_callback_state(&self) -> FrameCallbackState {
+    pub(crate) fn frame_callback_state(&self) -> FrameCallbackState {
         self.frame_callback_state
     }
 
     /// The frame callback was received, but not yet sent to the user.
-    pub fn frame_callback_received(&mut self) {
+    pub(crate) fn frame_callback_received(&mut self) {
         self.frame_callback_state = FrameCallbackState::Received;
     }
 
     /// Reset the frame callbacks state.
-    pub fn frame_callback_reset(&mut self) {
+    pub(crate) fn frame_callback_reset(&mut self) {
         self.frame_callback_state = FrameCallbackState::None;
     }
 
     /// Request a frame callback if we don't have one for this window in flight.
-    pub fn request_frame_callback(&mut self) {
+    pub(crate) fn request_frame_callback(&mut self) {
         match self.frame_callback_state {
             FrameCallbackState::None | FrameCallbackState::Received => {
                 self.frame_callback_state = FrameCallbackState::Requested;
@@ -208,6 +179,21 @@ impl SubsurfaceState {
         self.size
     }
 
+    /// Try to resize the window when the user can do so.
+    pub fn request_surface_size(&mut self, surface_size: Size) -> PhysicalSize<u32> {
+        self.resize(surface_size.to_logical(self.scale_factor()));
+        logical_to_physical_rounded(self.surface_size(), self.scale_factor())
+    }
+
+    pub fn position(&self) -> LogicalPosition<i32> {
+        self.position
+    }
+
+    pub fn set_position(&self, position: Position) {
+        let pos = position.to_physical(self.scale_factor());
+        self.subsurface.set_position(pos.x, pos.y);
+    }
+
     
     /// Reissue the transparency hint to the compositor.
     pub fn reload_transparency_hint(&self) {
@@ -221,12 +207,6 @@ impl SubsurfaceState {
         } else {
             warn!("Failed to mark window opaque.");
         }
-    }
-
-    /// Try to resize the window when the user can do so.
-    pub fn request_surface_size(&mut self, surface_size: Size) -> PhysicalSize<u32> {
-        self.resize(surface_size.to_logical(self.scale_factor()));
-        logical_to_physical_rounded(self.surface_size(), self.scale_factor())
     }
 
     /// Resize the window to the new surface size.
@@ -259,6 +239,8 @@ impl SubsurfaceState {
         if self.fractional_scale.is_none() {
             let _ = self.surface.set_buffer_scale(self.scale_factor as _);
         }
+
+        
     }
 
     /// Mark the window as transparent.

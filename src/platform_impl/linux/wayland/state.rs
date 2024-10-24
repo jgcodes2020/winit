@@ -66,6 +66,7 @@ pub struct WinitState {
     /// The currently present windows.
     pub windows: RefCell<AHashMap<SurfaceId, Arc<Mutex<WindowState>>>>,
 
+    /// The currently present subsurfaces.
     pub subsurfaces: RefCell<AHashMap<SurfaceId, Arc<Mutex<SubsurfaceState>>>>,
 
     /// The requests from the `Window` to EventLoop, such as close operations and redraw requests.
@@ -232,7 +233,29 @@ impl WinitState {
             // Update the scale factor right away.
             window.lock().unwrap().set_scale_factor(scale_factor);
             self.window_compositor_updates[pos].scale_changed = true;
-        } else if let Some(pointer) = self.pointer_surfaces.get(&surface.id()) {
+        } 
+        else if let Some(subsurface) = self.subsurfaces.get_mut().get(&window_id) {
+            if is_legacy && self.fractional_scaling_manager.is_some() {
+                return;
+            }
+
+            // The scale factor change is for the window.
+            let pos = if let Some(pos) = self
+                .window_compositor_updates
+                .iter()
+                .position(|update| update.window_id == window_id)
+            {
+                pos
+            } else {
+                self.window_compositor_updates.push(WindowCompositorUpdate::new(window_id));
+                self.window_compositor_updates.len() - 1
+            };
+
+            // Update the scale factor right away.
+            subsurface.lock().unwrap().set_scale_factor(scale_factor);
+            self.window_compositor_updates[pos].scale_changed = true;
+        }
+        else if let Some(pointer) = self.pointer_surfaces.get(&surface.id()) {
             // Get the window, where the pointer resides right now.
             let focused_window = match pointer.pointer().winit_data().focused_window() {
                 Some(focused_window) => focused_window,
