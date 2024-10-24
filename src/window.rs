@@ -1372,14 +1372,14 @@ impl std::hash::Hash for dyn Window + '_ {
 }
 
 #[cfg(feature = "rwh_06")]
-impl rwh_06::HasDisplayHandle for dyn Window + '_ {
+impl rwh_06::HasDisplayHandle for dyn Surface + '_ {
     fn display_handle(&self) -> Result<rwh_06::DisplayHandle<'_>, rwh_06::HandleError> {
         self.rwh_06_display_handle().display_handle()
     }
 }
 
 #[cfg(feature = "rwh_06")]
-impl rwh_06::HasWindowHandle for dyn Window + '_ {
+impl rwh_06::HasWindowHandle for dyn Surface + '_ {
     fn window_handle(&self) -> Result<rwh_06::WindowHandle<'_>, rwh_06::HandleError> {
         self.rwh_06_window_handle().window_handle()
     }
