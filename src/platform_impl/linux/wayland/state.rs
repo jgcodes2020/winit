@@ -35,6 +35,8 @@ use crate::platform_impl::wayland::types::xdg_activation::XdgActivationState;
 use crate::platform_impl::wayland::window::{WindowRequests, WindowState};
 use crate::platform_impl::wayland::SurfaceId;
 
+use super::window::subsurface::SubsurfaceState;
+
 /// Winit's Wayland state.
 pub struct WinitState {
     /// The WlRegistry.
@@ -63,6 +65,8 @@ pub struct WinitState {
 
     /// The currently present windows.
     pub windows: RefCell<AHashMap<SurfaceId, Arc<Mutex<WindowState>>>>,
+
+    pub subsurfaces: RefCell<AHashMap<SurfaceId, Arc<Mutex<SubsurfaceState>>>>,
 
     /// The requests from the `Window` to EventLoop, such as close operations and redraw requests.
     pub window_requests: RefCell<AHashMap<SurfaceId, Arc<WindowRequests>>>,
@@ -172,6 +176,7 @@ impl WinitState {
             xdg_activation: XdgActivationState::bind(globals, queue_handle).ok(),
 
             windows: Default::default(),
+            subsurfaces: Default::default(),
             window_requests: Default::default(),
             window_compositor_updates: Vec::new(),
             window_events_sink: Default::default(),

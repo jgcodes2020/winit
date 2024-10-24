@@ -420,6 +420,42 @@ impl WindowAttributes {
     }
 }
 
+pub struct SubsurfaceAttributes {
+    pub surface_size: Option<Size>,
+    pub position: Option<Position>,
+    pub transparent: bool,
+    pub cursor: Cursor,
+}
+
+impl Default for SubsurfaceAttributes {
+    fn default() -> Self {
+        Self { surface_size: None, position: None, transparent: false, cursor: Cursor::default() }
+    }
+}
+
+impl SubsurfaceAttributes {
+    pub fn with_surface_size<S: Into<Size>>(mut self, size: S) -> Self {
+        self.surface_size = Some(size.into());
+        self
+    }
+
+    pub fn with_position<P: Into<Position>>(mut self, position: P) -> Self {
+        self.position = Some(position.into());
+        self
+    }
+
+    pub fn with_transparent(mut self, transparent: bool) -> Self {
+        self.transparent = transparent;
+        self
+    }
+
+    #[inline]
+    pub fn with_cursor(mut self, cursor: impl Into<Cursor>) -> Self {
+        self.cursor = cursor.into();
+        self
+    }
+}
+
 /// Represents an area that can be drawn to; this includes windows.
 ///
 /// The surface is closed when dropped.

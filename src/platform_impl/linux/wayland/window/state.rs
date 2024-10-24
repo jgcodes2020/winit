@@ -1097,23 +1097,23 @@ impl Drop for WindowState {
 
 /// The state of the cursor grabs.
 #[derive(Clone, Copy)]
-struct GrabState {
+pub(super) struct GrabState {
     /// The grab mode requested by the user.
-    user_grab_mode: CursorGrabMode,
+    pub user_grab_mode: CursorGrabMode,
 
     /// The current grab mode.
-    current_grab_mode: CursorGrabMode,
+    pub current_grab_mode: CursorGrabMode,
 }
 
 impl GrabState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self { user_grab_mode: CursorGrabMode::None, current_grab_mode: CursorGrabMode::None }
     }
 }
 
 /// The state of the frame callback.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FrameCallbackState {
+pub(crate) enum FrameCallbackState {
     /// No frame callback was requested.
     #[default]
     None,

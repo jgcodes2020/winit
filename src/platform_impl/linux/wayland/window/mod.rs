@@ -30,6 +30,7 @@ use crate::window::{
 };
 
 pub(crate) mod state;
+pub(crate) mod subsurface;
 
 pub use state::WindowState;
 
