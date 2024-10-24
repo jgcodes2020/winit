@@ -233,8 +233,7 @@ impl WinitState {
             // Update the scale factor right away.
             window.lock().unwrap().set_scale_factor(scale_factor);
             self.window_compositor_updates[pos].scale_changed = true;
-        } 
-        else if let Some(subsurface) = self.subsurfaces.get_mut().get(&window_id) {
+        } else if let Some(subsurface) = self.subsurfaces.get_mut().get(&window_id) {
             if is_legacy && self.fractional_scaling_manager.is_some() {
                 return;
             }
@@ -254,8 +253,7 @@ impl WinitState {
             // Update the scale factor right away.
             subsurface.lock().unwrap().set_scale_factor(scale_factor);
             self.window_compositor_updates[pos].scale_changed = true;
-        }
-        else if let Some(pointer) = self.pointer_surfaces.get(&surface.id()) {
+        } else if let Some(pointer) = self.pointer_surfaces.get(&surface.id()) {
             // Get the window, where the pointer resides right now.
             let focused_window = match pointer.pointer().winit_data().focused_window() {
                 Some(focused_window) => focused_window,
@@ -266,6 +264,19 @@ impl WinitState {
                 window_state.lock().unwrap().reload_cursor_style()
             }
         }
+    }
+
+    pub(super) fn surface_state(&mut self, id: SurfaceId) -> AnySurfaceState {
+        self.windows
+            .get_mut()
+            .get(&id)
+            .map(|value| AnySurfaceState::Window(Arc::clone(&value)))
+            .or_else(|| {
+                self.subsurfaces
+                    .get_mut()
+                    .get(&id)
+                    .map(|value| AnySurfaceState::Subsurface(Arc::clone(&value)))
+            }).unwrap()
     }
 
     pub fn queue_close(updates: &mut Vec<WindowCompositorUpdate>, window_id: SurfaceId) {
@@ -463,3 +474,8 @@ sctk::delegate_registry!(WinitState);
 sctk::delegate_shm!(WinitState);
 sctk::delegate_xdg_shell!(WinitState);
 sctk::delegate_xdg_window!(WinitState);
+
+pub(super) enum AnySurfaceState {
+    Window(Arc<Mutex<WindowState>>),
+    Subsurface(Arc<Mutex<SubsurfaceState>>),
+}

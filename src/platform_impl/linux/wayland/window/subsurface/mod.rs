@@ -155,6 +155,7 @@ impl Subsurface {
     }
 
     fn surface(&self) -> &WlSurface {
+
         &self.surface
     }
 }

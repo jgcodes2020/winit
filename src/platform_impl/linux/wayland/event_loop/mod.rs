@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use sctk::reexports::calloop_wayland_source::WaylandSource;
 use sctk::reexports::client::{globals, Connection, QueueHandle};
+use sctk::reexports::csd_frame::WindowState;
 
 use crate::application::ApplicationHandler;
 use crate::cursor::OnlyCursorImage;
@@ -28,8 +29,9 @@ pub mod sink;
 pub use proxy::EventLoopProxy;
 use sink::EventSink;
 
-use super::state::{WindowCompositorUpdate, WinitState};
+use super::state::{AnySurfaceState, WindowCompositorUpdate, WinitState};
 use super::window::state::FrameCallbackState;
+use super::window::subsurface::{self, SubsurfaceState};
 use super::{logical_to_physical_rounded, SurfaceId};
 
 type WaylandDispatcher = calloop::Dispatcher<'static, WaylandSource<WinitState>, WinitState>;
@@ -299,73 +301,112 @@ impl EventLoop {
 
         for mut compositor_update in compositor_updates.drain(..) {
             let window_id = compositor_update.window_id;
-            if compositor_update.scale_changed {
-                let (physical_size, scale_factor) = self.with_state(|state| {
-                    let windows = state.windows.get_mut();
-                    let window = windows.get(&window_id).unwrap().lock().unwrap();
-                    let scale_factor = window.scale_factor();
-                    let size = logical_to_physical_rounded(window.surface_size(), scale_factor);
-                    (size, scale_factor)
-                });
 
-                // Stash the old window size.
-                let old_physical_size = physical_size;
+            match self.with_state(|state| state.surface_state(window_id)) {
+                AnySurfaceState::Window(window) => {
+                    if compositor_update.scale_changed {
+                        let (physical_size, scale_factor) = {
+                            let window = window.lock().unwrap();
+                            let scale_factor = window.scale_factor();
+                            let size =
+                                logical_to_physical_rounded(window.surface_size(), scale_factor);
+                            (size, scale_factor)
+                        };
 
-                let new_surface_size = Arc::new(Mutex::new(physical_size));
-                let event = SurfaceEvent::ScaleFactorChanged {
-                    scale_factor,
-                    surface_size_writer: SurfaceSizeWriter::new(Arc::downgrade(&new_surface_size)),
-                };
+                        // Stash the old window size.
+                        let old_physical_size = physical_size;
 
-                app.window_event(&self.active_event_loop, window_id, event);
+                        let new_surface_size = Arc::new(Mutex::new(physical_size));
+                        let event = SurfaceEvent::ScaleFactorChanged {
+                            scale_factor,
+                            surface_size_writer: SurfaceSizeWriter::new(Arc::downgrade(
+                                &new_surface_size,
+                            )),
+                        };
 
-                let physical_size = *new_surface_size.lock().unwrap();
-                drop(new_surface_size);
+                        app.window_event(&self.active_event_loop, window_id, event);
 
-                // Resize the window when user altered the size.
-                if old_physical_size != physical_size {
-                    self.with_state(|state| {
-                        let windows = state.windows.get_mut();
-                        let mut window = windows.get(&window_id).unwrap().lock().unwrap();
+                        let physical_size = *new_surface_size.lock().unwrap();
+                        drop(new_surface_size);
 
-                        let new_logical_size: LogicalSize<f64> =
-                            physical_size.to_logical(scale_factor);
-                        window.request_surface_size(new_logical_size.into());
-                    });
+                        // Resize the window when user altered the size.
+                        if old_physical_size != physical_size {
+                            {
+                                let mut window = window.lock().unwrap();
 
-                    // Make it queue resize.
-                    compositor_update.resized = true;
-                }
-            }
+                                let new_logical_size: LogicalSize<f64> =
+                                    physical_size.to_logical(scale_factor);
+                                window.request_surface_size(new_logical_size.into());
+                            }
 
-            // NOTE: Rescale changed the physical size which winit operates in, thus we should
-            // resize.
-            if compositor_update.resized || compositor_update.scale_changed {
-                let physical_size = self.with_state(|state| {
-                    let windows = state.windows.get_mut();
-                    let window = windows.get(&window_id).unwrap().lock().unwrap();
+                            // Make it queue resize.
+                            compositor_update.resized = true;
+                        }
+                    }
 
-                    let scale_factor = window.scale_factor();
-                    let size = logical_to_physical_rounded(window.surface_size(), scale_factor);
+                    // NOTE: Rescale changed the physical size which winit operates in, thus we should
+                    // resize.
+                    if compositor_update.resized || compositor_update.scale_changed {
+                        let physical_size = self.with_state(|state| {
+                            let window = window.lock().unwrap();
 
-                    // Mark the window as needed a redraw.
-                    state
-                        .window_requests
-                        .get_mut()
-                        .get_mut(&window_id)
-                        .unwrap()
-                        .redraw_requested
-                        .store(true, Ordering::Relaxed);
+                            let scale_factor = window.scale_factor();
+                            let size =
+                                logical_to_physical_rounded(window.surface_size(), scale_factor);
 
-                    size
-                });
+                            // Mark the window as needed a redraw.
+                            state
+                                .window_requests
+                                .get_mut()
+                                .get_mut(&window_id)
+                                .unwrap()
+                                .redraw_requested
+                                .store(true, Ordering::Relaxed);
 
-                let event = SurfaceEvent::SurfaceResized(physical_size);
-                app.window_event(&self.active_event_loop, window_id, event);
-            }
+                            size
+                        });
 
-            if compositor_update.close_window {
-                app.window_event(&self.active_event_loop, window_id, SurfaceEvent::CloseRequested);
+                        let event = SurfaceEvent::SurfaceResized(physical_size);
+                        app.window_event(&self.active_event_loop, window_id, event);
+                    }
+
+                    if compositor_update.close_window {
+                        app.window_event(
+                            &self.active_event_loop,
+                            window_id,
+                            SurfaceEvent::CloseRequested,
+                        );
+                    }
+                },
+                AnySurfaceState::Subsurface(subsurface) => {
+                    // NOTE: Rescale changed the physical size which winit operates in, thus we should
+                    // resize.
+                    if compositor_update.scale_changed {
+                        let physical_size = self.with_state(|state| {
+                            let subsurface = subsurface.lock().unwrap();
+
+                            let scale_factor = subsurface.scale_factor();
+                            let size = logical_to_physical_rounded(
+                                subsurface.surface_size(),
+                                scale_factor,
+                            );
+
+                            // Mark the window as needed a redraw.
+                            state
+                                .window_requests
+                                .get_mut()
+                                .get_mut(&window_id)
+                                .unwrap()
+                                .redraw_requested
+                                .store(true, Ordering::Relaxed);
+
+                            size
+                        });
+
+                        let event = SurfaceEvent::SurfaceResized(physical_size);
+                        app.window_event(&self.active_event_loop, window_id, event);
+                    }
+                },
             }
         }
 
@@ -408,29 +449,50 @@ impl EventLoop {
 
         for window_id in window_ids.iter() {
             let event = self.with_state(|state| {
-                let window_requests = state.window_requests.get_mut();
-                if window_requests.get(window_id).unwrap().take_closed() {
-                    mem::drop(window_requests.remove(window_id));
-                    mem::drop(state.windows.get_mut().remove(window_id));
-                    return Some(SurfaceEvent::Destroyed);
+                {
+                    let window_requests = state.window_requests.get_mut();
+                    if window_requests.get(window_id).unwrap().take_closed() {
+                        mem::drop(window_requests.remove(window_id));
+                        mem::drop(state.windows.get_mut().remove(window_id));
+                        return Some(SurfaceEvent::Destroyed);
+                    }
                 }
 
-                let mut window =
-                    state.windows.get_mut().get_mut(window_id).unwrap().lock().unwrap();
+                match state.surface_state(*window_id) {
+                    AnySurfaceState::Window(window) => {
+                        let window_requests = state.window_requests.get_mut();
+                        let mut window = window.lock().unwrap();
 
-                if window.frame_callback_state() == FrameCallbackState::Requested {
-                    return None;
+                        if window.frame_callback_state() == FrameCallbackState::Requested {
+                            return None;
+                        }
+
+                        // Reset the frame callbacks state.
+                        window.frame_callback_reset();
+                        let mut redraw_requested =
+                            window_requests.get(window_id).unwrap().take_redraw_requested();
+
+                        // Redraw the frame while at it.
+                        redraw_requested |= window.refresh_frame();
+
+                        redraw_requested.then_some(SurfaceEvent::RedrawRequested)
+                    },
+                    AnySurfaceState::Subsurface(subsurface) => {
+                        let window_requests = state.window_requests.get_mut();
+                        let mut window = subsurface.lock().unwrap();
+
+                        if window.frame_callback_state() == FrameCallbackState::Requested {
+                            return None;
+                        }
+
+                        // Reset the frame callbacks state.
+                        window.frame_callback_reset();
+                        let redraw_requested =
+                            window_requests.get(window_id).unwrap().take_redraw_requested();
+
+                        redraw_requested.then_some(SurfaceEvent::RedrawRequested)
+                    },
                 }
-
-                // Reset the frame callbacks state.
-                window.frame_callback_reset();
-                let mut redraw_requested =
-                    window_requests.get(window_id).unwrap().take_redraw_requested();
-
-                // Redraw the frame while at it.
-                redraw_requested |= window.refresh_frame();
-
-                redraw_requested.then_some(SurfaceEvent::RedrawRequested)
             });
 
             if let Some(event) = event {
@@ -615,11 +677,12 @@ impl RootActiveEventLoop for ActiveEventLoop {
     }
 
     fn create_subsurface(
-            &self,
-            parent: &dyn crate::window::Surface,
-            subsurface_attributes: crate::window::SubsurfaceAttributes,
-        ) -> Result<Box<dyn crate::window::Subsurface>, RequestError> {
-        let subsurface = crate::platform_impl::wayland::Subsurface::new(self, parent, subsurface_attributes)?;
+        &self,
+        parent: &dyn crate::window::Surface,
+        subsurface_attributes: crate::window::SubsurfaceAttributes,
+    ) -> Result<Box<dyn crate::window::Subsurface>, RequestError> {
+        let subsurface =
+            crate::platform_impl::wayland::Subsurface::new(self, parent, subsurface_attributes)?;
         Ok(Box::new(subsurface))
     }
 
