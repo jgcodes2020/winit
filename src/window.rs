@@ -1346,9 +1346,7 @@ pub trait Window: Surface {
     fn show_window_menu(&self, position: Position);
 
     /// Upcasts this `Window` to a [`Surface`]. 
-    fn as_surface(&self) -> &dyn Surface where Self: Sized {
-        self
-    }
+    fn as_surface(&self) -> &dyn Surface;
 }
 
 impl dyn Window {

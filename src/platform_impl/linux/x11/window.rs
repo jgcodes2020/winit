@@ -309,6 +309,10 @@ impl CoreWindow for Window {
     fn show_window_menu(&self, position: Position) {
         self.0.show_window_menu(position);
     }
+    
+    fn as_surface(&self) -> &dyn CoreSurface {
+        self
+    }
 }
 
 #[cfg(feature = "rwh_06")]

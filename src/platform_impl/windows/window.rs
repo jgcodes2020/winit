@@ -1068,6 +1068,10 @@ impl CoreWindow for Window {
             );
         }
     }
+
+    fn as_surface(&self) -> &dyn CoreSurface {
+        self
+    }
 }
 
 pub(super) struct InitData<'a> {

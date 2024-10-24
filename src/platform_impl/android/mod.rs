@@ -985,6 +985,10 @@ impl CoreWindow for Window {
     }
 
     fn reset_dead_keys(&self) {}
+    
+    fn as_surface(&self) -> &dyn CoreSurface {
+        self
+    }
 }
 
 #[derive(Default, Clone, Debug)]

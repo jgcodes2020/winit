@@ -830,6 +830,10 @@ impl CoreWindow for Window {
     fn show_window_menu(&self, position: Position) {
         self.maybe_wait_on_main(|delegate| delegate.show_window_menu(position))
     }
+    
+    fn as_surface(&self) -> &dyn CoreSurface {
+        self
+    }
 }
 
 // WindowExtIOS

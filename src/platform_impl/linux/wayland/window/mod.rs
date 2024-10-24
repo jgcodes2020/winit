@@ -665,6 +665,10 @@ impl CoreWindow for Window {
         let position = position.to_logical(scale_factor);
         self.window_state.lock().unwrap().show_window_menu(position);
     }
+    
+    fn as_surface(&self) -> &dyn CoreSurface {
+        self
+    }
 }
 
 /// The request from the window to the event loop.

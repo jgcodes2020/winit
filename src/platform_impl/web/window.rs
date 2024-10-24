@@ -390,6 +390,10 @@ impl RootWindow for Window {
     }
 
     fn show_window_menu(&self, _: Position) {}
+    
+    fn as_surface(&self) -> &dyn CoreSurface {
+        self
+    }
 }
 
 #[cfg(feature = "rwh_06")]

@@ -464,6 +464,10 @@ impl CoreWindow for Window {
     fn set_theme(&self, _theme: Option<window::Theme>) {}
 
     fn set_content_protected(&self, _protected: bool) {}
+
+    fn as_surface(&self) -> &dyn CoreSurface {
+        self
+    }
 }
 
 #[cfg(feature = "rwh_06")]
