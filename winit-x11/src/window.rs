@@ -20,7 +20,7 @@ use winit_core::monitor::{
     Fullscreen, MonitorHandle as CoreMonitorHandle, MonitorHandleProvider, VideoMode,
 };
 use winit_core::window::{
-    CursorGrabMode, ImePurpose, ResizeDirection, Theme, UserAttentionType, Window as CoreWindow,
+    CursorGrabMode, ImePurpose, ResizeDirection, Theme, UserAttentionType, Surface as CoreSurface, Window as CoreWindow,
     WindowAttributes, WindowButtons, SurfaceId, WindowLevel,
 };
 use x11rb::connection::{Connection, RequestConnection};
@@ -65,7 +65,7 @@ impl Window {
     }
 }
 
-impl CoreWindow for Window {
+impl CoreSurface for Window {
     fn id(&self) -> SurfaceId {
         self.0.id()
     }
@@ -82,6 +82,66 @@ impl CoreWindow for Window {
         self.0.pre_present_notify()
     }
 
+    fn surface_size(&self) -> PhysicalSize<u32> {
+        self.0.surface_size()
+    }
+
+    fn request_surface_size(&self, size: Size) -> Option<PhysicalSize<u32>> {
+        self.0.request_surface_size(size)
+    }
+
+    fn set_transparent(&self, transparent: bool) {
+        self.0.set_transparent(transparent);
+    }
+
+    fn set_cursor(&self, cursor: Cursor) {
+        self.0.set_cursor(cursor);
+    }
+
+    fn set_cursor_position(&self, position: Position) -> Result<(), RequestError> {
+        self.0.set_cursor_position(position)
+    }
+
+    fn set_cursor_grab(&self, mode: CursorGrabMode) -> Result<(), RequestError> {
+        self.0.set_cursor_grab(mode)
+    }
+
+    fn set_cursor_visible(&self, visible: bool) {
+        self.0.set_cursor_visible(visible);
+    }
+
+    fn set_cursor_hittest(&self, hittest: bool) -> Result<(), RequestError> {
+        self.0.set_cursor_hittest(hittest)
+    }
+
+    fn current_monitor(&self) -> Option<CoreMonitorHandle> {
+        self.0.current_monitor().map(|monitor| CoreMonitorHandle(Arc::new(monitor)))
+    }
+
+    fn available_monitors(&self) -> Box<dyn Iterator<Item = CoreMonitorHandle>> {
+        Box::new(
+            self.0
+                .available_monitors()
+                .into_iter()
+                .map(|monitor| CoreMonitorHandle(Arc::new(monitor))),
+        )
+    }
+
+    fn primary_monitor(&self) -> Option<CoreMonitorHandle> {
+        self.0.primary_monitor().map(|monitor| CoreMonitorHandle(Arc::new(monitor)))
+    }
+
+    fn rwh_06_display_handle(&self) -> &dyn rwh_06::HasDisplayHandle {
+        self
+    }
+
+    fn rwh_06_window_handle(&self) -> &dyn rwh_06::HasWindowHandle {
+        self
+    }
+}
+
+impl CoreWindow for Window {
+
     fn reset_dead_keys(&self) {
         winit_common::xkb::reset_dead_keys();
     }
@@ -96,14 +156,6 @@ impl CoreWindow for Window {
 
     fn set_outer_position(&self, position: Position) {
         self.0.set_outer_position(position)
-    }
-
-    fn surface_size(&self) -> PhysicalSize<u32> {
-        self.0.surface_size()
-    }
-
-    fn request_surface_size(&self, size: Size) -> Option<PhysicalSize<u32>> {
-        self.0.request_surface_size(size)
     }
 
     fn outer_size(&self) -> PhysicalSize<u32> {
@@ -132,10 +184,6 @@ impl CoreWindow for Window {
 
     fn set_title(&self, title: &str) {
         self.0.set_title(title);
-    }
-
-    fn set_transparent(&self, transparent: bool) {
-        self.0.set_transparent(transparent);
     }
 
     fn set_blur(&self, blur: bool) {
@@ -250,22 +298,6 @@ impl CoreWindow for Window {
         self.0.title()
     }
 
-    fn set_cursor(&self, cursor: Cursor) {
-        self.0.set_cursor(cursor);
-    }
-
-    fn set_cursor_position(&self, position: Position) -> Result<(), RequestError> {
-        self.0.set_cursor_position(position)
-    }
-
-    fn set_cursor_grab(&self, mode: CursorGrabMode) -> Result<(), RequestError> {
-        self.0.set_cursor_grab(mode)
-    }
-
-    fn set_cursor_visible(&self, visible: bool) {
-        self.0.set_cursor_visible(visible);
-    }
-
     fn drag_window(&self) -> Result<(), RequestError> {
         self.0.drag_window()
     }
@@ -276,35 +308,6 @@ impl CoreWindow for Window {
 
     fn show_window_menu(&self, position: Position) {
         self.0.show_window_menu(position);
-    }
-
-    fn set_cursor_hittest(&self, hittest: bool) -> Result<(), RequestError> {
-        self.0.set_cursor_hittest(hittest)
-    }
-
-    fn current_monitor(&self) -> Option<CoreMonitorHandle> {
-        self.0.current_monitor().map(|monitor| CoreMonitorHandle(Arc::new(monitor)))
-    }
-
-    fn available_monitors(&self) -> Box<dyn Iterator<Item = CoreMonitorHandle>> {
-        Box::new(
-            self.0
-                .available_monitors()
-                .into_iter()
-                .map(|monitor| CoreMonitorHandle(Arc::new(monitor))),
-        )
-    }
-
-    fn primary_monitor(&self) -> Option<CoreMonitorHandle> {
-        self.0.primary_monitor().map(|monitor| CoreMonitorHandle(Arc::new(monitor)))
-    }
-
-    fn rwh_06_display_handle(&self) -> &dyn rwh_06::HasDisplayHandle {
-        self
-    }
-
-    fn rwh_06_window_handle(&self) -> &dyn rwh_06::HasWindowHandle {
-        self
     }
 }
 
