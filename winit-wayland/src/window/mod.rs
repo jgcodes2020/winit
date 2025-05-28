@@ -18,10 +18,10 @@ use winit_core::cursor::Cursor;
 use winit_core::error::{NotSupportedError, RequestError};
 use winit_core::event::{Ime, WindowEvent};
 use winit_core::event_loop::AsyncRequestSerial;
+use winit_core::impl_surface_downcast;
 use winit_core::monitor::{Fullscreen, MonitorHandle as CoreMonitorHandle};
 use winit_core::window::{
-    CursorGrabMode, ImePurpose, ResizeDirection, Theme, UserAttentionType, Window as CoreWindow,
-    Surface as CoreSurface, WindowAttributes, WindowButtons, SurfaceId, WindowLevel,
+    CursorGrabMode, ImePurpose, ResizeDirection, Surface as CoreSurface, SurfaceDowncastMut, SurfaceDowncastRef, SurfaceId, Theme, UserAttentionType, Window as CoreWindow, WindowAttributes, WindowButtons, WindowLevel
 };
 
 use super::event_loop::sink::EventSink;
@@ -280,6 +280,8 @@ impl rwh_06::HasDisplayHandle for Window {
 }
 
 impl CoreSurface for Window {
+    impl_surface_downcast!(Window);
+
     fn id(&self) -> SurfaceId {
         self.window_id
     }
